@@ -3,7 +3,9 @@ var util = require('./lib/utility');
 var partials = require('express-partials');
 var bodyParser = require('body-parser');
 var session = require('express-session');
-
+var Promise = require('bluebird');
+// var bcrypt = Promise.promisifyAll(require('bcrypt-nodejs'));
+var bcrypt = require('bcrypt-nodejs');
 
 var db = require('./app/config');
 var Users = require('./app/collections/users');
@@ -35,7 +37,6 @@ function(req, res) {
   if(req.session.userName === undefined) {
     res.render('login');
   } else {
-    console.log(req.session)
     res.render('index');
   }
 });
@@ -126,14 +127,23 @@ app.post('/login',
     var username = req.body.username;
     var password = req.body.password;
 
-    if (username === "nyan" && password == "cat") {
-      req.session.regenerate(function () {
-        req.session.userName = username;
-        res.redirect('/');
+
+    new User({username: username}).fetch().then(function(user) {
+      bcrypt.compare(password, user.get('password'), function (err, result) {
+
+        if(result) {
+          req.session.regenerate(function () {
+            req.session.userName = username;
+            res.redirect('/');
+          });
+        } else {
+          console.log('Incorrect Password');
+          res.redirect('/login');
+        }
+
       });
-    } else {
-      res.redirect('/login');
-    }
+    });
+
   });
 
 /************************************************************/

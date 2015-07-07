@@ -6,12 +6,12 @@ var util = require('../../lib/utility');
 var User = db.Model.extend({
   tableName: 'users',
   initialize: function () {
-    this.on('creating', function() {
-// See https://github.com/tgriesser/bookshelf/issues/192#issuecomment-32554243
-// for example
-//----------------------------------------------------------------
+    this.on('creating', this.hashPassword, this);
+  },
 
-      bcrypt.hash(this.get('password'), null, null, util.hashPass.bind(this));
+  hashPassword: function() {
+    return Promise.promisify(bcrypt.hash)(this.get('password'), null, null).bind(this).then(function(hash) {
+      this.set('password', hash);
     });
   }
 });
