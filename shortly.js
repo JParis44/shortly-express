@@ -34,57 +34,67 @@ app.use('/', session({
 
 app.get('/',
 function(req, res) {
-  if(req.session.userName === undefined) {
-    res.render('login');
-  } else {
+  if(util.checkUser(req)) {
     res.render('index');
+  } else {
+    res.redirect('/login');
   }
 });
 
 app.get('/create',
 function(req, res) {
-  res.render('index');
+  if(util.checkUser(req)) {
+    res.render('index');
+  } else {
+    res.redirect('/login');
+  }
 });
 
 app.get('/links',
 function(req, res) {
-  Links.reset().fetch().then(function(links) {
-    res.send(200, links.models);
-  });
+  if(util.checkUser(req)) {
+    Links.reset().fetch().then(function(links) {
+      res.send(200, links.models);
+    });
+  } else {
+    res.redirect('/login');
+  }
 });
 
 app.post('/links',
 function(req, res) {
-  var uri = req.body.url;
+ if(util.checkUser(req)) {
+    var uri = req.body.url;
 
-  if (!util.isValidUrl(uri)) {
-    console.log('Not a valid url: ', uri);
-    return res.send(404);
-  }
-
-  new Link({ url: uri }).fetch().then(function(found) {
-    if (found) {
-      res.send(200, found.attributes);
-    } else {
-      util.getUrlTitle(uri, function(err, title) {
-        if (err) {
-          console.log('Error reading URL heading: ', err);
-          return res.send(404);
-        }
-
-        var link = new Link({
-          url: uri,
-          title: title,
-          base_url: req.headers.origin
-        });
-
-        link.save().then(function(newLink) {
-          Links.add(newLink);
-          res.send(200, newLink);
-        });
-      });
+    if (!util.isValidUrl(uri)) {
+      console.log('Not a valid url: ', uri);
+      return res.send(404);
     }
-  });
+
+    new Link({ url: uri }).fetch().then(function(found) {
+      if (found) {
+        res.send(200, found.attributes);
+      } else {
+        util.getUrlTitle(uri, function(err, title) {
+          if (err) {
+            console.log('Error reading URL heading: ', err);
+            return res.send(404);
+          }
+
+          var link = new Link({
+            url: uri,
+            title: title,
+            base_url: req.headers.origin
+          });
+
+          link.save().then(function(newLink) {
+            Links.add(newLink);
+            res.send(200, newLink);
+          });
+        });
+      }
+    });
+  }
 });
 
 /************************************************************/
@@ -111,7 +121,11 @@ app.post('/signup', function(req, res){
 
        user.save().then(function(newUser) {
          Users.add(newUser);
-         res.redirect('/login');
+         req.session.regenerate(function(){
+           req.session.userName = username;
+           res.redirect('/');
+         })
+
        })
      }
    });
@@ -129,22 +143,36 @@ app.post('/login',
 
 
     new User({username: username}).fetch().then(function(user) {
-      bcrypt.compare(password, user.get('password'), function (err, result) {
+      if(user) {
+        bcrypt.compare(password, user.get('password'), function (err, result) {
+          if(result) {
+            req.session.regenerate(function () {
+              req.session.userName = username;
+              res.redirect('/');
+            });
+          } else {
+            console.log('Incorrect Password');
+            res.redirect('/login');
+          }
 
-        if(result) {
-          req.session.regenerate(function () {
-            req.session.userName = username;
-            res.redirect('/');
-          });
-        } else {
-          console.log('Incorrect Password');
-          res.redirect('/login');
-        }
-
-      });
+        });
+      } else {
+        console.log('Incorrect Username');
+        res.redirect('/login');
+      }
     });
 
   });
+
+app.get('/logout', function(req, res){
+  req.session.destroy(function(err){
+    if (err) {
+      console.log(err);
+    } else {
+      res.redirect('/login');
+    }
+  });
+});
 
 /************************************************************/
 // Handle the wildcard route last - if all other routes fail
